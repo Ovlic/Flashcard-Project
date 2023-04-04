@@ -1,8 +1,8 @@
 import random, datetime
 
 # Get seed, so questions are the same for one day and change the next day
-x = datetime.datetime.today().strftime("%Y:%m:%d")
-random.seed(x)
+# x = datetime.datetime.today().strftime("%Y:%m:%d")
+# random.seed(x)
 
 
 countries = [
@@ -43,7 +43,7 @@ countries = [
     {'country': 'Chad', 'capital': "N'Djamena"},
     {'country': 'Chile', 'capital': 'Santiago'},
     {'country': 'China', 'capital': 'Beijing'},
-    {'country': 'Colombia', 'capital': 'BogotÃ¡'},
+    {'country': 'Colombia', 'capital': 'Bogotá'},
     {'country': 'Comoros', 'capital': 'Moroni'},
     {'country': 'Cook Islands (New Zealand)', 'capital': 'Avarua'},
     {'country': 'Costa Rica', 'capital': 'San Jose'},
