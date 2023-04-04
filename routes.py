@@ -1,21 +1,61 @@
 
-from flask import Flask, render_template, redirect, url_for, request, session
-import time, random, countries, os, redis
-from flask_session import Session
+from flask import Flask, render_template, redirect, url_for, request
+import time, random, countries, os, json, sqlite3, requests
 
-from quiz_base import CorrectAnswer
+from quiz import CorrectAnswer
 from flask_wtf import FlaskForm as Form
 from wtforms import RadioField
+from datetime import datetime
+
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from oauthlib.oauth2 import WebApplicationClient
+from db.user import User
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "719501886935-d5j4qtigtm929l1e43oh8mk8fa3l8973.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "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")
+GOOGLE_DISCOVERY_URL = (
+    "https://accounts.google.com/.well-known/openid-configuration"
+)
 
 app = Flask(__name__)
-app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_REDIS'] = redis.from_url('redis://localhost:6379')
 app.secret_key = os.urandom(24)
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-sess = Session()
-sess.init_app(app)
+@login_manager.unauthorized_handler
+def unauthorized():
+    return "You must be logged in to access this content.", 403
+
+
+# # Naive database setup
+# try:
+#     import db
+#     from user import User
+#     db.init_db_command()
+# except sqlite3.OperationalError:
+#     # Assume it's already been created
+#     pass
+
+def get_db_connection():
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# OAuth2 client setup
+client = WebApplicationClient(GOOGLE_CLIENT_ID)
+
+
+# Flask-Login helper to retrieve a user from our db
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
+
 
 
 def random_quiz():
@@ -38,80 +78,45 @@ question_counter = 5
 percent_counter = 0
 percent_increase = 100/question_counter
 
-def add_to_session(
-    thecountry: str,
-    thecapital: str, 
-    random_capitals: list, 
-    correct_answer: tuple, 
-    incorrect_answers: list,
-    countries_guessed: list,
-    counter: int,
-    correct_counter: int,
-    question_counter: int,
-    percent_counter: int,
-    percent_increase: float
-    ):
-    session['thecountry'] = thecountry
-    session['thecapital'] = thecapital
-    session['random_capitals'] = random_capitals
-    session['correct_answer'] = correct_answer
-    session['incorrect_answers'] = incorrect_answers
-    session['countries_guessed'] = countries_guessed
-    session['counter'] = counter
-    session['correct_counter'] = correct_counter
-    session['question_counter'] = question_counter
-    session['percent_counter'] = percent_counter
-    session['percent_increase'] = percent_increase
-    print(f"Type test: {type(session.get('counter', None))}")
+@app.route("/index")
+def index():
+    if current_user.is_authenticated:
+        return (
+            f"""<p>Hello, {current_user.name}! You're logged in! Email: {current_user.email}</p>
+            <div><p>Google Profile Picture:</p>
+            <img src="{current_user.profile_pic}" alt="Google profile pic"></img></div>
+            <a class="button" href="/logout">Logout</a>
+            <a class="button" href="/">Start Quiz</a>
 
-def get_from_session():
-    print(f"Type test from get: {type(session.get('counter', None))}")
-    thecountry = session.get('thecountry', None)
-    thecapital = session.get('thecapital', None)
-    random_capitals = session.get('random_capitals', None)
-    correct_answer = session.get('correct_answer', None)
-    incorrect_answers = session.get('incorrect_answers', None)
-    countries_guessed = session.get('countries_guessed', None)
-    counter = (session.get('counter', None))
-    correct_counter = session.get('correct_counter', None)
-    question_counter = session.get('question_counter', None)
-    percent_counter = session.get('percent_counter', None)
-    percent_increase = session.get('percent_increase', None)
-    return thecountry, thecapital, random_capitals, correct_answer, incorrect_answers, countries_guessed, counter, correct_counter, question_counter, percent_counter, percent_increase
+            """
+        )
+    else:
+        return '''
+        <div class="row">
+  <div class="col-md-3">
+    <a class="btn btn-outline-dark" href="/login" role="button" style="text-transform:none">
+      <img width="20px" style="margin-bottom:3px; margin-right:5px" alt="Google sign-in" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png" />
+      Login with Google
+    </a>
+  </div>
+</div>
+<!-- Minified CSS and JS -->
+<link   rel="stylesheet" 
+        href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" 
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" 
+        crossorigin="anonymous">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" 
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" 
+        crossorigin="anonymous">
+</script>'''
 
 
 @app.route('/', methods=['GET', 'POST'])
 def wtf_quiz(): 
     global incorrect_answers, counter, percent_counter, percent_increase, correct_counter, question_counter, countries_guessed, thecountry, thecapital, random_capitals, correct_answer
-    print("***************")
-    if counter in request.args:
-        counter = int(request.args['counter'])
-        print(f"Got counter from request.args, counter = {counter}")
-    print(request.args['thecountry'] if 'thecountry' in request.args else "No thecountry")
     if counter != 0:
-        thecountry, thecapital, random_capitals, correct_answer, incorrect_answers, countries_guessed, fake_counter, correct_counter, question_counter, percent_counter, percent_increase = get_from_session()
-    else:
-        session['counter'] = counter
-        print(f"Set counter in session, counter = {counter}")
-
-    if 'thecountry' in request.args:
-        thecountry = request.args['thecountry']
-        print("Got thecountry from request.args")
-    if 'thecapital' in request.args:
-        thecapital = request.args['thecapital']
-        print("Got thecapital from request.args")
-
-    if 'random_capitals' in request.args:
-        random_capitals_str = request.args['random_capitals']
-        random_capitals_str = random_capitals_str.replace("'", "").replace('"', '')
-        random_capitals = []
-        for capital_pair in random_capitals_str[2:-2].split("), ("):
-            random_capitals.append(tuple(capital_pair.split(", ")))
-        print("Got random_capitals from request.args")
-
-    if 'correct_answer' in request.args:
-        correct_answer = request.args['correct_answer']
-        print("Got correct_answer from request.args")
+        pass
+        #thecountry, thecapital, random_capitals, correct_answer, incorrect_answers, countries_guessed, fake_counter, correct_counter, question_counter, percent_counter, percent_increase = get_from_session()
 
     print(f"thecountry: {thecountry}")
     print(f"thecapital: {thecapital}")
@@ -134,13 +139,13 @@ def wtf_quiz():
 
     form = PopQuizTest()
     answer = str(form.q1.validators[0].answer)
-    counter += 1
     # print("Country: ", thecountry)
     # print("Capital: ", thecapital)
     # print(f"Answer: {answer}")
 
     if form.is_submitted():
         print("Submitted!")
+        counter += 1
 
     if form.validate():
         print("Valid!")
@@ -150,8 +155,7 @@ def wtf_quiz():
         countries_guessed.append(thecountry)
         correct_counter += 1
         percent_counter = (correct_counter/question_counter) * 100
-        #time.sleep(2)
-        #return redirect(url_for('passed')) 
+ 
     elif form.is_submitted():
             if form.errors[next(iter(form.errors))][0] == 'Incorrect answer.':
                 print("WRONG ANSWER!")
@@ -168,15 +172,19 @@ def wtf_quiz():
                 
             else:
                 print("form.errors: ", form.errors)
+
     if form.is_submitted():
         time.sleep(2)
         if percent_counter >= 100:
             return redirect(url_for('passed'))
+
         if incorrect_answers != []:
             redo_chance = bool(random.getrandbits(1))
+            print(question_counter)
+            print(counter/question_counter)
             if redo_chance or counter/question_counter == 1:
                 print("Redo chance!")
-                if incorrect_answers[0]['run_min'] <= counter:
+                if incorrect_answers[0]['run_min'] <= counter or counter/question_counter == 1:
                     print("Run min reached!")
                     thecountry = incorrect_answers[0]['thecountry']
                     thecapital = incorrect_answers[0]['thecapital']
@@ -185,21 +193,7 @@ def wtf_quiz():
                     incorrect_answers.pop(0)
                     print(f"Removed {thecountry} from incorrect answers.")
 
-                    add_to_session(
-                        thecountry,
-                        thecapital, 
-                        random_capitals, 
-                        correct_answer, 
-                        incorrect_answers,
-                        countries_guessed,
-                        counter,
-                        correct_counter,
-                        question_counter,
-                        percent_counter,
-                        percent_increase
-                        )
-
-                    return redirect(url_for('wtf_quiz'), code=307)
+                    return redirect(url_for('wtf_quiz'))
                 else:
                     print("Run min not reached, cancel redo chance.")
 
@@ -210,21 +204,8 @@ def wtf_quiz():
 
         print(f"NEW CAPITAL: {thecapital}")
 
-        add_to_session(
-            thecountry,
-            thecapital, 
-            random_capitals, 
-            correct_answer, 
-            incorrect_answers,
-            countries_guessed,
-            counter,
-            correct_counter,
-            question_counter,
-            percent_counter,
-            percent_increase
-            )
         print(f"random_capitals: {random_capitals}")
-        return redirect(url_for('wtf_quiz', thecountry=thecountry, thecapital=thecapital, random_capitals=str(random_capitals), correct_answer=correct_answer, counter=counter))
+        return redirect(url_for('wtf_quiz'))
 
 
 
@@ -233,22 +214,148 @@ def wtf_quiz():
         question=form.q1,
         answer=answer, 
         percent_counter=percent_counter, 
-        # counter=counter, 
+        counter=counter, 
         percent_increase=percent_increase, 
         question_counter=question_counter,
         correct_counter=correct_counter,
+        logged_in=current_user.is_authenticated,
+        profile_pic=current_user.profile_pic if current_user.is_authenticated else None,
         )
 
 
 @app.route('/passed')
 def passed(): 
+    global counter, percent_counter, percent_increase, correct_counter, question_counter, countries_guessed, thecountry, thecapital, random_capitals, correct_answer, incorrect_answers
+    thescore = round((5/question_counter)*100, 2)
+
+    if current_user.is_authenticated:
+        print("User is authenticated.")
+        user = User.get_from_email(current_user.email)
+        print(user.id)
+        user.games.save_new_game(user.id, datetime.now().timestamp(), thescore)
+        print("Game saved.")
+        user.stats.update_stats(user.id, thescore, True if thescore == 100 else False)
+        print("Stats updated.")
+
+
     return render_template('passed.html')
+
+@app.route('/another_quiz')
+def another_quiz():
+    global counter, percent_counter, percent_increase, correct_counter, question_counter, countries_guessed, thecountry, thecapital, random_capitals, correct_answer, incorrect_answers
+    counter = 0
+    percent_counter = 0
+    percent_increase = 0
+    correct_counter = 0
+    question_counter = 5
+    countries_guessed = []
+    thecountry, thecapital, random_capitals, correct_answer = random_quiz()
+    incorrect_answers = []
+    return redirect(url_for('wtf_quiz'))
+
+@app.route('/stats')
+def stats():
+    if current_user.is_authenticated:
+        user = User.get_from_email(current_user.email)
+        userStats = user.stats.get_stats(user.id)
+        if userStats is None:
+            print("User has no stats yet.")
+            return render_template('stats.html', user_name=user.name, total_games=0, first_try=0, average_score=0)
+        return render_template('stats.html', user_name=user.name, total_games=userStats.total, first_try=userStats.first_try, average_score=userStats.average)
+    else:
+        return redirect(url_for('login'))
+
+@app.route("/login")
+def login():
+    # Find out what URL to hit for Google login
+    google_provider_cfg = get_google_provider_cfg()
+    authorization_endpoint = google_provider_cfg["authorization_endpoint"]
+
+    # Use library to construct the request for login and provide
+    # scopes that let you retrieve user's profile from Google
+    request_uri = client.prepare_request_uri(
+        authorization_endpoint,
+        redirect_uri=request.base_url + "/callback",
+        scope=["openid", "email", "profile"],
+    )
+    return redirect(request_uri)
+
+
+@app.route("/login/callback")
+def callback():
+    # Get authorization code Google sent back to you
+    code = request.args.get("code")
+
+    # Find out what URL to hit to get tokens that allow you to ask for
+    # things on behalf of a user
+    google_provider_cfg = get_google_provider_cfg()
+    token_endpoint = google_provider_cfg["token_endpoint"]
+
+    # Prepare and send request to get tokens! Yay tokens!
+    token_url, headers, body = client.prepare_token_request(
+        token_endpoint,
+        authorization_response=request.url,
+        redirect_url=request.base_url,
+        code=code,
+    )
+    token_response = requests.post(
+        token_url,
+        headers=headers,
+        data=body,
+        auth=(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET),
+    )
+
+    # Parse the tokens!
+    client.parse_request_body_response(json.dumps(token_response.json()))
+
+    # Now that we have tokens (yay) let's find and hit URL
+    # from Google that gives you user's profile information,
+    # including their Google Profile Image and Email
+    userinfo_endpoint = google_provider_cfg["userinfo_endpoint"]
+    uri, headers, body = client.add_token(userinfo_endpoint)
+    userinfo_response = requests.get(uri, headers=headers, data=body)
+
+    # We want to make sure their email is verified.
+    # The user authenticated with Google, authorized our
+    # app, and now we've verified their email through Google!
+    if userinfo_response.json().get("email_verified"):
+        unique_id = userinfo_response.json()["sub"]
+        users_email = userinfo_response.json()["email"]
+        picture = userinfo_response.json()["picture"]
+        users_name = userinfo_response.json()["given_name"]
+    else:
+        return "User email not available or not verified by Google.", 400
+
+    # Create a user in our db with the information provided
+    # by Google
+    user = User(
+        id_=unique_id, name=users_name, email=users_email, profile_pic=picture
+    )
+
+    # Doesn't exist? Add to database
+    if not User.get(unique_id):
+        User.create(unique_id, users_name, users_email, picture)
+
+    # Begin user session by logging the user in
+    print("Logging in user %s" % users_name)
+    login_user(user)
+
+    # Send user back to homepage
+    return redirect(url_for("wtf_quiz"))
+
+
+def get_google_provider_cfg():
+    return requests.get(GOOGLE_DISCOVERY_URL).json()
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("wtf_quiz"))
 
 
 if __name__ == '__main__':
     print("Starting app...")
     app.secret_key = os.urandom(24)
-    app.config['SESSION_TYPE'] = 'filesystem'
-    sess.init_app(app)
-    app.run(debug=True)
+    app.run(debug=True, ssl_context=("certificate.crt", "privateKey.key"))
     # If error with no access: go to chrome://net-internals/#sockets and flush sockets
