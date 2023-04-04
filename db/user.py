@@ -1,7 +1,8 @@
-from flask_login import UserMixin
+
 import sqlite3
-from stats import Stats
-from games import Games
+from flask_login import UserMixin
+from db.stats import Stats
+from db.games import Games
 
 
 def get_db_connection():
