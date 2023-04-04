@@ -1,5 +1,5 @@
 
-from user import User
+from db.user import User
 
 user = User.get(1)
 
