@@ -1,40 +1,59 @@
-
-from quiz_base import PopQuiz, CorrectAnswer
 from flask_wtf import FlaskForm as Form
 from wtforms import RadioField
-import countries, random
+from wtforms.validators import ValidationError
 
 
-country_capital = countries.get_random_country()
-thecountry = country_capital['country']
-thecapital = country_capital['capital']
-random_capitals = countries.get_three_capitals()
-correct_answer = (thecapital, thecapital)
-random_capitals.append((thecapital, thecapital))
-random.shuffle(random_capitals)
+class CorrectAnswer(object):
+    def __init__(self, answer):
+        self.answer = answer
 
-def random_quiz():
-    global thecountry, thecapital, random_capitals, correct_answer
-    country_capital = countries.get_random_country()
-    thecountry = country_capital['country']
-    thecapital = country_capital['capital']
-    random_capitals = countries.get_three_capitals()
-    correct_answer = (thecapital, thecapital)
-    random_capitals.append((thecapital, thecapital))
-    random.shuffle(random_capitals)
+    def __call__(self, form, field):
+        message = 'Incorrect answer.'
 
-    print("thecountry: ", thecountry)
-    print("thecapital: ", thecapital)
+        if field.data != self.answer:
+            raise ValidationError(message)
 
-    #return PopQuizTest()
-
-
-class PopQuizTest(Form):
+"""class PopQuiz(Form):
     class Meta:
         csrf = False
-        
-    q1 = RadioField(
-            f"The capital of {thecountry} is ...",
-            choices=random_capitals,
-            validators=[CorrectAnswer(thecapital)]
+
+    def __init__(self, *, question_label:str, choices:list, answer:str, **kwargs):
+        self.question_label = question_label
+        self.choices = choices
+        self.answer = answer
+        super().__init__(**kwargs,)
+
+    @property
+    def q1(self):
+        return RadioField(
+            self.question_label,
+            choices=self.choices,
+            validators=[CorrectAnswer(self.answer)]
         )
+"""
+
+
+class PopQuiz(Form):
+    class Meta:
+        csrf = False
+
+    question_label:str = ...
+    choices:list = [(..., ...), (...,...)]
+    answer:str = ...
+        
+
+    q1 = RadioField(
+            question_label,
+            choices=choices,
+            validators=[CorrectAnswer(answer)]
+        )
+
+class PopQuiz(Form):
+    class Meta:
+        csrf = False
+
+    q1 = RadioField(
+        "The answer to question one is False.",
+        choices=[('True', 'True'), ('False', 'False')],
+        validators=[CorrectAnswer('False')]
+    )
