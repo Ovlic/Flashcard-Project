@@ -9,52 +9,7 @@
         <link rel="stylesheet" href="{{ url_for('static', filename='css/progress_bar.css') }}">
         <script src="https://code.jquery.com/jquery-1.11.0.min.js"></script>
         <script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
-        <style>
-        .dropbtn {
-            background-color: #04AA6D;
-            color: white;
-            padding: 12px;
-            font-size: 16px;
-            border: none;
-          }
-          
-          .dropdown {
-            position: absolute;
-            top: 0;
-            right: 0;
-            padding: 30px;
-            display: inline-block;
-          }
-          
-          .dropdown-content {
-            display: none;
-            position: absolute;
-            background-color: #f1f1f1;
-            min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-            z-index: 1;
-          }
-          
-          .dropdown-content a {
-            color: black;
-            padding: 12px 16px;
-            text-decoration: none;
-            display: block;
-          }
-          
-          .dropdown-content a:hover {background-color: #ddd;}
-          
-          .dropdown:hover .dropdown-content {display: block;}
-          
-          .dropdown:hover .dropbtn {background-color: #3e8e41;}
-          </style>
     </head>
-    <style type="text/css">
-        .container {
-            max-width: 500px;
-        }
-    </style>
-
     <body>
         <div class="progress-bar">
             <div>
@@ -71,18 +26,20 @@
                 </div>
                 <input type="submit" value="Submit" id="submitform"/>
             </form>
-            <div class="dropdown">
-                <button class="dropbtn">Account</button>
+            <div id="account_dropdown" class="dropdown">
+                <button id="button_dropdown" class="dropbtn">
+                    <!--Account-->
+                </button>
                 <div class="dropdown-content">
-                    <a href="#">Stats</a>
-                    <a href="#">Logout</a>
+                    <a href="/stats">Stats</a>
+                    <a href="/logout">Logout</a>
                 </div>
             </div> 
-
-              <button onclick="location.href = '/login'"type="button" class="login-with-google-btn" style="position:absolute; bottom:20px; right:20px">
-                Sign in with Google
-              </button>
-              
+            <div id="google_login">
+                <button id="signin_google" onclick="location.href = '/login'" type="button" class="login-with-google-btn" style="position:absolute; bottom:20px; right:20px">
+                    Sign in with Google
+                </button>
+            </div>
             <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
             <script type="text/javascript">
                 
@@ -91,7 +48,25 @@
                 percent_increase = "{{percent_increase}}"
                 question_counter = parseInt("{{question_counter}}")
                 correct_counter = parseInt("{{correct_counter}}")
+                logged_in = ("{{logged_in}}" === 'True');
+                profile_pic = "{{profile_pic}}"
+                console.log("Logged in: {{logged_in}}")
                 //$('.progress-bar').width(percent_counter);
+
+                /*
+                border-radius: 50%; */
+
+                if(logged_in){
+                    $('#signin_google').hide()
+                    //$('#account_dropdown').show()
+                    $('#button_dropdown').append('<img src="' + profile_pic + '" style="width: 50px; height: 50px; border-radius: 50%;">')
+                    $('#button_dropdown').append('<h3>Account</h3>')//.val('Account')
+
+                }
+                else{
+                    $('#signin_google').show()
+                    //$('#account_dropdown').hide()
+                }
                 
                 const pb = document.querySelector('.progress-bar > div');
                 pb.style.width = percent_counter + '%';
